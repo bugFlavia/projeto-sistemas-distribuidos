@@ -1,0 +1,32 @@
+{
+  "name": "projeto-sistemas-distribuidos",
+  "version": "1.0.0",
+  "description": "Projeto da disciplina de sistemas distribuídos.",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "node --watch --experimental-strip-types server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bugFlavia/projeto-sistemas-distribuidos.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bugs": {
+    "url": "https://github.com/bugFlavia/projeto-sistemas-distribuidos/issues"
+  },
+  "homepage": "https://github.com/bugFlavia/projeto-sistemas-distribuidos#readme",
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "typescript": "^7.0.2"
+  }
+}
