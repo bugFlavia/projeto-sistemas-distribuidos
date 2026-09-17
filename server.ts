@@ -37,7 +37,6 @@ server.listen(porta, () => {
     console.log(`Servidor rodando na porta ${porta}`);
 });
 
-// Encerramento gracioso: fecha o servidor e as conexões ao receber Ctrl+C ou SIGTERM.
 for (const sinal of ['SIGINT', 'SIGTERM'] as const) {
     process.on(sinal, () => {
         console.log(`\nRecebido ${sinal}, encerrando o servidor...`);
