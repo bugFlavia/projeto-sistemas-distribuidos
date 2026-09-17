@@ -13,7 +13,6 @@ const server: net.Server = net.createServer((socket: net.Socket) => {
         console.log(`[${cliente}] ${mensagem.toString('utf8').trimEnd()}`);
     });
 
-    // Sem um handler de 'error' o processo inteiro é encerrado por uma exceção no socket.
     socket.on('error', (erro: Error) => {
         console.error(`Erro na conexão ${cliente}: ${erro.message}`);
     });
