@@ -10,8 +10,8 @@ import type { Sensor, TipoSensor } from './sensor.ts';
 export type { Aleatorio } from './random.ts';
 export { criarAleatorio, ruidoUniforme } from './random.ts';
 
-export type { LeituraSensor, Sensor, TipoSensor } from './sensor.ts';
-export { VERSAO_SCHEMA } from './sensor.ts';
+export type { LeituraSensor, ResultadoMedia, Sensor, TipoSensor } from './sensor.ts';
+export { VERSAO_SCHEMA, ehLeituraSensor, ehResultadoMedia } from './sensor.ts';
 
 export type { PerfilSensor } from './catalog.ts';
 export { PERFIS_SENSORES } from './catalog.ts';

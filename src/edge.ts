@@ -2,9 +2,8 @@ import * as net from 'node:net';
 
 import { registrar, registrarErro } from './comum/log.ts';
 import { analisarEndereco, codificarLinha, criarLeitorDeLinhas } from './comum/protocolo.ts';
-import { VERSAO_SCHEMA } from './sensors/index.ts';
+import { VERSAO_SCHEMA, ehLeituraSensor } from './sensors/index.ts';
 import type { Endereco } from './comum/protocolo.ts';
-import type { LeituraSensor } from './sensors/index.ts';
 
 /**
  * Nó de borda (edge).
@@ -26,32 +25,6 @@ const INTERVALO_DO_STATUS_MS = 10_000;
 const PORTA_PADRAO_DE_ESCUTA = 4000;
 const SERVICO_PADRAO = '127.0.0.1:3000';
 const PORTA_PADRAO_DO_SERVICO = 3000;
-
-/**
- * Confere o formato mínimo do envelope.
- *
- * Como este nó é um middleware, ele descarta o que não entende em vez de
- * repassar lixo para o serviço. Note que campos desconhecidos são ignorados de
- * propósito: é isso que permite evoluir o envelope sem quebrar quem o recebe.
- */
-function ehLeituraSensor(valor: unknown): valor is LeituraSensor {
-    if (typeof valor !== 'object' || valor === null) {
-        return false;
-    }
-
-    const campos = valor as Record<string, unknown>;
-
-    return (
-        typeof campos['idSensor'] === 'string' &&
-        typeof campos['tipo'] === 'string' &&
-        typeof campos['valor'] === 'number' &&
-        Number.isFinite(campos['valor']) &&
-        typeof campos['unidade'] === 'string' &&
-        typeof campos['timestamp'] === 'string' &&
-        typeof campos['sequencia'] === 'number' &&
-        typeof campos['versaoSchema'] === 'number'
-    );
-}
 
 function iniciar(): void {
     const porta = Number(process.env['EDGE_PORT'] ?? PORTA_PADRAO_DE_ESCUTA);
