@@ -1,7 +1,9 @@
 # projeto-sistemas-distribuidos
 Projeto da disciplina de sistemas distribuídos.
 
-Servidor TCP simples escrito em TypeScript com o módulo `node:net`.
+Simulador de sensores, gateways de borda e serviço de média, conversando por TCP em TypeScript.
+
+Cada componente roda como um processo independente, de modo que derrubar um não afeta os outros. O objetivo do desenho é que acrescentar sensores ou gateways não exija mudar o que já está rodando.
 
 ## Requisitos
 
@@ -17,69 +19,79 @@ npm install
 
 | Comando | Descrição |
 | --- | --- |
-| `npm run dev` | Executa `src/server.ts` direto pelo Node, com reload automático |
+| `npm run servico` | Serviço de média: acumula por sensor e por janela |
+| `npm run edge` | Gateway de borda; um por sensor, use `--porta` e `--id` |
+| `npm run simulador` | Um sensor simulado; use `--sensor` |
 | `npm run build` | Compila o TypeScript para `dist/` |
-| `npm start` | Executa o servidor compilado (`dist/server.js`) |
 | `npm run typecheck` | Apenas verifica os tipos, sem gerar arquivos |
+| `npm run dev` | Servidor de exemplo (`src/server.ts`), com reload automático |
+| `npm start` | Servidor de exemplo compilado (`dist/server.js`) |
 
-O servidor escuta na porta `3000` por padrão. Para trocar, use a variável de ambiente `PORT`:
+### Executando os componentes
 
-```bash
-PORT=8080 npm run dev
-```
-
-## Como testar
-
-Com o servidor rodando, conecte um cliente:
+`npm run servico`, `npm run edge` e `npm run simulador` executam os fontes `.ts` direto pelo Node (type stripping), sem etapa de build. Depois de `npm run build`, os equivalentes compilados são:
 
 ```bash
-node -e "const net=require('node:net');const s=net.createConnection(3000,'127.0.0.1',()=>s.write('ola\n'));s.on('data',d=>process.stdout.write(d));"
+node dist/servico-media.js
+node dist/edge.js --id gw-luz --porta 4001
+node dist/simulador.js --sensor luz --edge 127.0.0.1:4001
 ```
 
-Ou use `telnet`/`nc`:
-
-```bash
-nc 127.0.0.1 3000
-```
-
-Ao conectar, o servidor responde com o endereço do cliente e registra no console tudo o que for recebido. Encerre com `Ctrl+C` — o servidor faz o shutdown de forma graciosa.
+`src/server.ts`, `npm run dev` e `npm start` são o servidor TCP de exemplo do começo do projeto: continuam funcionando (`PORT` muda a porta), mas não participam da cadeia.
 
 ## Fluxo de dados
 
 ```mermaid
 flowchart LR
-    S["simulador<br/>(1 processo por sensor)"] -->|"NDJSON/TCP"| E["edge<br/>(middleware)"]
-    E -->|"NDJSON/TCP"| M["serviço de média"]
+    S1["simulador<br/>sensor A"] --> G1["gateway A"]
+    S2["simulador<br/>sensor B"] --> G2["gateway B"]
+    G1 -->|"leitura"| M["serviço de média"]
+    M -->|"média da janela"| G1
+    G2 -->|"leitura"| M
+    M -->|"média da janela"| G2
 ```
 
-Nesta etapa o edge é um **middleware**: confere o envelope e repassa a leitura intacta para o serviço. A agregação por janela ainda não existe.
+**Um gateway por sensor.** Cada par sensor + gateway é independente: acrescentar um sensor é subir mais um par de processos, sem tocar no que já está rodando.
+
+O gateway não agrega nada. Ele confere o envelope e repassa a leitura intacta. No caminho de volta, recebe do serviço a média já calculada e a **mantém em memória para exibir**.
+
+O serviço de média acumula por sensor dentro de uma janela de tempo e responde **na mesma conexão** em que a leitura chegou. Como é o gateway que abre a conexão, o serviço não precisa conhecer o endereço de ninguém para responder — a média volta exatamente para quem mandou o dado.
 
 ### Rodando
 
 Em terminais separados:
 
 ```bash
-npm run dev        # 1. destino final (por enquanto o servidor de log, porta 3000)
-npm run edge       # 2. o edge, porta 4000
+npm run servico   # 1. serviço de média: porta 5000, janela de 5 s
 
-# 3. um processo por sensor — 6 no total
-npm run simulador -- --sensor luz
-npm run simulador -- --sensor umidade
-npm run simulador -- --sensor presenca
-npm run simulador -- --sensor pressao
-npm run simulador -- --sensor ultrassonico
-npm run simulador -- --sensor temperatura
+# 2. um gateway por sensor (cada um na sua porta)
+npm run edge -- --id gw-luz          --porta 4001
+npm run edge -- --id gw-umidade      --porta 4002
+npm run edge -- --id gw-presenca     --porta 4003
+npm run edge -- --id gw-pressao      --porta 4004
+npm run edge -- --id gw-ultrassonico --porta 4005
+npm run edge -- --id gw-temperatura  --porta 4006
+
+# 3. o sensor de cada gateway
+npm run simulador -- --sensor luz         --edge 127.0.0.1:4001
+npm run simulador -- --sensor umidade     --edge 127.0.0.1:4002
+npm run simulador -- --sensor presenca    --edge 127.0.0.1:4003
+npm run simulador -- --sensor pressao     --edge 127.0.0.1:4004
+npm run simulador -- --sensor ultrassonico --edge 127.0.0.1:4005
+npm run simulador -- --sensor temperatura --edge 127.0.0.1:4006
 ```
 
-Cada processo se identifica pelo `--id` (padrão `<tipo>-01`), amostra no intervalo do catálogo e reconecta sozinho se o edge cair.
+Cada processo se identifica pelo `--id`, amostra no intervalo do catálogo e reconecta sozinho se o nó de cima cair. Os gateways só precisam de `--porta` distinta — nada mais muda entre eles.
 
-**Derrube um processo e veja o resultado:** o sensor que morreu para de publicar, os outros cinco continuam e o edge segue repassando. Não existe estado compartilhado entre os processos — é falha parcial, não falha total.
+**Derrube um processo e veja o resultado:** o par que morreu para de publicar, os outros cinco continuam e o serviço segue calculando as médias deles. Não existe estado compartilhado entre os pares — é falha parcial, não falha total.
 
 | Variável | Onde | Padrão | Para que serve |
 | --- | --- | --- | --- |
-| `EDGE_PORT` | edge | `4000` | porta em que o edge escuta |
-| `SERVICO_ADDR` | edge | `127.0.0.1:3000` | para onde o edge repassa |
-| `EDGE_ADDR` | simulador | `127.0.0.1:4000` | edge de destino |
+| `SERVICO_PORT` | serviço | `5000` | porta em que o serviço escuta |
+| `JANELA_MS` | serviço | `5000` | duração da janela de agregação |
+| `EDGE_PORT` | gateway | `4000` | porta de escuta (`--porta` tem precedência) |
+| `SERVICO_ADDR` | gateway | `127.0.0.1:5000` | onde está o serviço de média |
+| `EDGE_ADDR` | simulador | `127.0.0.1:4000` | gateway de destino |
 
 ### Sobre o protocolo
 
@@ -88,6 +100,16 @@ As mensagens são NDJSON: um JSON por linha. O TCP **não preserva fronteiras de
 O edge valida o formato mínimo do envelope e **descarta o que não entende**, em vez de repassar lixo adiante. Campos desconhecidos são ignorados de propósito: é o que permite evoluir o envelope sem quebrar quem recebe. Se a `versaoSchema` for mais nova que a conhecida, o edge avisa e encaminha mesmo assim.
 
 A semântica de entrega é **at-most-once**: sem conexão, a leitura é descartada e contabilizada. Ainda não há buffer nem reenvio — é uma decisão consciente, não um esquecimento.
+
+### Sobre a janela de agregação
+
+A janela é **alinhada ao relógio absoluto** (múltiplo de `JANELA_MS` calculado sobre o `timestamp` da leitura), e não a "desde que o gateway conectou". Sem isso, dois gateways teriam janelas deslocadas e as médias não seriam comparáveis — que é justamente o que impediria acrescentar mais um nó depois.
+
+O serviço acumula internamente **`soma` e `quantidade`**, nunca a média já dividida. É o que permite combinar janelas de tamanhos diferentes sem distorcer o resultado, e o que torna barato mover a agregação para o gateway mais tarde. A divisão acontece só na hora de responder.
+
+A resposta traz também `minimo` e `maximo`, que saem de graça no acumulador.
+
+Uma leitura que chegue atrasada, para uma janela já fechada, recria a entrada e provoca uma nova emissão com o número corrigido. É escolha consciente: preferimos reemitir a perder o dado.
 
 ## Sensores simulados
 
@@ -122,13 +144,14 @@ Adicionar apenas outra **instância** de um tipo que já existe (um segundo sens
 
 ## Estrutura
 
-- `src/simulador.ts` — um processo por sensor: publica as leituras no edge
-- `src/edge.ts` — middleware: valida o envelope e repassa para o serviço de média
-- `src/server.ts` — servidor TCP de exemplo, usado como destino enquanto o serviço de média não existe
+- `src/simulador.ts` — um processo por sensor: publica as leituras no gateway
+- `src/edge.ts` — gateway: valida, repassa a leitura e guarda em memória a média que volta
+- `src/servico-media.ts` — acumula por sensor e por janela de tempo e devolve a média ao gateway
+- `src/server.ts` — servidor TCP de exemplo; não participa da cadeia
 - `src/comum/`
   - `protocolo.ts` — framing NDJSON e leitura de endereço `host:porta`
   - `log.ts` — log com carimbo de horário, para correlacionar os vários processos
-- `src/sensors/` — contrato e implementação dos sensores simulados
+- `src/sensors/` — contrato e implementação dos `LeituraSensor` e `ResultadoMedia`, e os validadores `ehLeituraSensor`/`ehResultadoMedia`
   - `sensor.ts` — interface `Sensor`, envelope `LeituraSensor` e tipos
   - `catalog.ts` — catálogo com unidade, faixa e intervalo de cada tipo
   - `base-sensor.ts` — comportamento comum (sequência, arredondamento, faixa)
