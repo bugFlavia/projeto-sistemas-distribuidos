@@ -1,4 +1,5 @@
 import * as net from 'node:net';
+import { parseArgs } from 'node:util';
 
 import { registrar, registrarErro } from './comum/log.ts';
 import { analisarEndereco, codificarLinha, criarLeitorDeLinhas } from './comum/protocolo.ts';
@@ -18,19 +19,66 @@ import type { Endereco } from './comum/protocolo.ts';
  * todas as conexões de entrada: o número de sensores não vira número de
  * conexões abertas lá em cima.
  */
+/**
+ * Rótulo deste nó nos logs.
+ *
+ * Como passam a rodar vários gateways ao mesmo tempo, cada um precisa se
+ * identificar — sem isso as linhas dos terminais ficam indistinguíveis. Vira o
+ * valor de `--id`, ou `edge:<porta>`.
+ */
+let ESC = 'edge';
 
-const ESC = 'edge';
 const INTERVALO_DE_RECONEXAO_MS = 1000;
 const INTERVALO_DO_STATUS_MS = 10_000;
 const PORTA_PADRAO_DE_ESCUTA = 4000;
 const SERVICO_PADRAO = '127.0.0.1:3000';
 const PORTA_PADRAO_DO_SERVICO = 3000;
 
-function iniciar(): void {
-    const porta = Number(process.env['EDGE_PORT'] ?? PORTA_PADRAO_DE_ESCUTA);
-    if (!Number.isInteger(porta) || porta < 1 || porta > 65535) {
-        throw new Error(`EDGE_PORT inválida: "${process.env['EDGE_PORT']}".`);
+function uso(): string {
+    return [
+        'Uso: npm run edge -- [--id <texto>] [--porta <número>]',
+        '',
+        '  --id <texto>       nome deste gateway nos logs (padrão: edge:<porta>)',
+        `  --porta <número>   porta em que escuta (padrão: ${PORTA_PADRAO_DE_ESCUTA})`,
+        '  -h, --ajuda        mostra esta mensagem',
+        '',
+        'Variáveis de ambiente: EDGE_PORT substitui --porta e SERVICO_ADDR define',
+        `o serviço de destino (padrão: ${SERVICO_PADRAO}).`,
+    ].join('\n');
+}
+
+function analisarArgumentos(): { id?: string; porta?: string; ajuda?: boolean } {
+    try {
+        return parseArgs({
+            options: {
+                id: { type: 'string' },
+                porta: { type: 'string' },
+                ajuda: { type: 'boolean', short: 'h' },
+            },
+        }).values;
+    } catch (erro) {
+        registrarErro(ESC, erro instanceof Error ? erro.message : String(erro));
+        console.error(uso());
+        process.exit(1);
     }
+}
+
+function iniciar(): void {
+    const argumentos = analisarArgumentos();
+
+    if (argumentos.ajuda === true) {
+        console.log(uso());
+        process.exit(0);
+    }
+
+    const portaTexto =
+        argumentos.porta ?? process.env['EDGE_PORT'] ?? String(PORTA_PADRAO_DE_ESCUTA);
+    const porta = Number(portaTexto);
+    if (!Number.isInteger(porta) || porta < 1 || porta > 65535) {
+        throw new Error(`porta inválida: "${portaTexto}".`);
+    }
+
+    ESC = argumentos.id ?? `edge:${porta}`;
 
     const enderecoDoServico: Endereco = analisarEndereco(
         process.env['SERVICO_ADDR'] ?? SERVICO_PADRAO,
