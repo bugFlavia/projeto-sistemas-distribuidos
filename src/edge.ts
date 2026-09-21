@@ -32,8 +32,8 @@ let ESC = 'edge';
 const INTERVALO_DE_RECONEXAO_MS = 1000;
 const INTERVALO_DO_STATUS_MS = 10_000;
 const PORTA_PADRAO_DE_ESCUTA = 4000;
-const SERVICO_PADRAO = '127.0.0.1:3000';
-const PORTA_PADRAO_DO_SERVICO = 3000;
+const SERVICO_PADRAO = '127.0.0.1:5000';
+const PORTA_PADRAO_DO_SERVICO = 5000;
 
 function uso(): string {
     return [
