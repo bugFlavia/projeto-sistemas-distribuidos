@@ -5,7 +5,7 @@ import { SensorDePressao } from './pressao.ts';
 import { SensorDeTemperatura } from './temperatura.ts';
 import { SensorDeUmidade } from './umidade.ts';
 import { SensorUltrassonico } from './ultrassonico.ts';
-import type { Sensor } from './sensor.ts';
+import type { Sensor, TipoSensor } from './sensor.ts';
 
 export type { Aleatorio } from './random.ts';
 export { criarAleatorio, ruidoUniforme } from './random.ts';
@@ -24,32 +24,46 @@ export { SensorDeTemperatura } from './temperatura.ts';
 export { SensorDeUmidade } from './umidade.ts';
 export { SensorUltrassonico } from './ultrassonico.ts';
 
-/**
- * Seed padrão da simulação.
- *
- * Fixa de propósito: com a mesma seed, qualquer um que rode o projeto gera
- * exatamente o mesmo fluxo de leituras, o que torna a apresentação e os testes
- * reproduzíveis. Para variar a cada execução, passe `seed: Date.now()`.
- */
 export const SEED_PADRAO = 42;
 
+const TIPOS_EM_ORDEM: readonly TipoSensor[] = [
+    'luz',
+    'umidade',
+    'presenca',
+    'pressao',
+    'ultrassonico',
+    'temperatura',
+];
+
 /**
- * Cria uma instância de cada sensor simulado.
+ * Fábrica de um sensor específico.
  *
- * Adicionar um sensor novo é acrescentar uma linha aqui mais a classe
- * correspondente: nenhum consumidor das leituras precisa mudar. Cada sensor
- * recebe a sua própria sequência aleatória, para que o consumo de números de
- * um não altere o comportamento dos outros.
+ * É o que o simulador usa: cada processo cria exatamente um sensor e roda com
+ * ele. Adicionar um sensor novo é acrescentar um `case` aqui e uma entrada no
+ * catálogo — nada mais no sistema precisa saber que ele existe.
  */
+export function criarSensor(tipo: TipoSensor, id: string, seed: number): Sensor {
+    const aleatorio = criarAleatorio(seed);
+
+    switch (tipo) {
+        case 'luz':
+            return new SensorDeLuz(id, aleatorio);
+        case 'umidade':
+            return new SensorDeUmidade(id, aleatorio);
+        case 'presenca':
+            return new SensorDePresenca(id, aleatorio);
+        case 'pressao':
+            return new SensorDePressao(id, aleatorio);
+        case 'ultrassonico':
+            return new SensorUltrassonico(id, aleatorio);
+        case 'temperatura':
+            return new SensorDeTemperatura(id, aleatorio);
+    }
+}
+
+/** Cria uma instância de cada tipo, útil para testes e para rodar tudo num processo só. */
 export function criarSensores(opcoes: { seed?: number } = {}): Sensor[] {
     const seed = opcoes.seed ?? SEED_PADRAO;
 
-    return [
-        new SensorDeLuz('luz-01', criarAleatorio(seed + 1)),
-        new SensorDeUmidade('umidade-01', criarAleatorio(seed + 2)),
-        new SensorDePresenca('presenca-01', criarAleatorio(seed + 3)),
-        new SensorDePressao('pressao-01', criarAleatorio(seed + 4)),
-        new SensorUltrassonico('ultrassonico-01', criarAleatorio(seed + 5)),
-        new SensorDeTemperatura('temperatura-01', criarAleatorio(seed + 6)),
-    ];
+    return TIPOS_EM_ORDEM.map((tipo, indice) => criarSensor(tipo, `${tipo}-01`, seed + indice + 1));
 }
