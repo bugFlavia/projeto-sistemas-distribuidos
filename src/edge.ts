@@ -3,9 +3,9 @@ import { parseArgs } from 'node:util';
 
 import { registrar, registrarErro } from './comum/log.ts';
 import { analisarEndereco, codificarLinha, criarLeitorDeLinhas } from './comum/protocolo.ts';
-import { VERSAO_SCHEMA, ehLeituraSensor, ehResultadoMedia } from './sensors/index.ts';
+import { VERSAO_SCHEMA, ehLeituraSensor, ehResultadoMedia } from './comum/contrato.ts';
 import type { Endereco } from './comum/protocolo.ts';
-import type { ResultadoMedia } from './sensors/index.ts';
+import type { ResultadoMedia } from './comum/contrato.ts';
 
 let ESC = 'edge';
 

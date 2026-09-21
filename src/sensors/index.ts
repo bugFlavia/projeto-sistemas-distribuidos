@@ -5,13 +5,14 @@ import { SensorDePressao } from './pressao.ts';
 import { SensorDeTemperatura } from './temperatura.ts';
 import { SensorDeUmidade } from './umidade.ts';
 import { SensorUltrassonico } from './ultrassonico.ts';
-import type { Sensor, TipoSensor } from './sensor.ts';
+import type { Sensor } from './sensor.ts';
+import type { TipoSensor } from '../comum/contrato.ts';
 
 export type { Aleatorio } from './random.ts';
 export { criarAleatorio, ruidoUniforme } from './random.ts';
 
-export type { LeituraSensor, ResultadoMedia, Sensor, TipoSensor } from './sensor.ts';
-export { VERSAO_SCHEMA, ehLeituraSensor, ehResultadoMedia } from './sensor.ts';
+export type { TipoSensor } from '../comum/contrato.ts';
+export type { Sensor } from './sensor.ts';
 
 export type { PerfilSensor } from './catalog.ts';
 export { PERFIS_SENSORES } from './catalog.ts';

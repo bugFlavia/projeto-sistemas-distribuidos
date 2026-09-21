@@ -1,4 +1,4 @@
-import type { TipoSensor } from './sensor.ts';
+import type { TipoSensor } from '../comum/contrato.ts';
 
 export interface PerfilSensor {
     readonly unidade: string;

@@ -1,6 +1,7 @@
 import { PERFIS_SENSORES } from './catalog.ts';
-import { VERSAO_SCHEMA } from './sensor.ts';
-import type { LeituraSensor, Sensor, TipoSensor } from './sensor.ts';
+import { VERSAO_SCHEMA } from '../comum/contrato.ts';
+import type { LeituraSensor, TipoSensor } from '../comum/contrato.ts';
+import type { Sensor } from './sensor.ts';
 import type { Aleatorio } from './random.ts';
 
 function limitar(valor: number, minimo: number, maximo: number): number {

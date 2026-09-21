@@ -2,7 +2,7 @@ import * as net from 'node:net';
 
 import { registrar, registrarErro } from './comum/log.ts';
 import { codificarLinha, criarLeitorDeLinhas } from './comum/protocolo.ts';
-import { VERSAO_SCHEMA, ehLeituraSensor } from './sensors/index.ts';
+import { VERSAO_SCHEMA, ehLeituraSensor } from './comum/contrato.ts';
 
 /**
  * Serviço de média.
