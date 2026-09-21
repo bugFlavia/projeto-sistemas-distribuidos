@@ -7,26 +7,6 @@ import { VERSAO_SCHEMA, ehLeituraSensor, ehResultadoMedia } from './sensors/inde
 import type { Endereco } from './comum/protocolo.ts';
 import type { ResultadoMedia } from './sensors/index.ts';
 
-/**
- * Gateway (nó de borda).
- *
- * Não agrega nada: aceita a conexão do sensor, confere se o envelope está
- * dentro do contrato e repassa a leitura intacta para o serviço de média.
- *
- * A conexão com o serviço é única e usada nos dois sentidos: por ela sobem as
- * leituras e descem as médias calculadas. Como é o gateway que abre a conexão,
- * o serviço não precisa conhecer o endereço de ninguém para responder — e a
- * média volta exatamente para quem mandou o dado.
- *
- * As médias recebidas ficam em memória neste nó, para exibição.
- */
-/**
- * Rótulo deste nó nos logs.
- *
- * Como passam a rodar vários gateways ao mesmo tempo, cada um precisa se
- * identificar — sem isso as linhas dos terminais ficam indistinguíveis. Vira o
- * valor de `--id`, ou `edge:<porta>`.
- */
 let ESC = 'edge';
 
 const INTERVALO_DE_RECONEXAO_MS = 1000;

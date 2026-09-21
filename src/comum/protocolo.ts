@@ -1,6 +1,5 @@
 import type { Buffer } from 'node:buffer';
 
-/** Endereço de destino de uma conexão TCP. */
 export interface Endereco {
     readonly host: string;
     readonly porta: number;
@@ -8,12 +7,7 @@ export interface Endereco {
 
 export const HOST_PADRAO = '127.0.0.1';
 
-/**
- * Interpreta um endereço no formato `host:porta`.
- *
- * O host é opcional (`:4000` usa o padrão) e um valor só com número é tratado
- * como porta (`4000` equivale a `127.0.0.1:4000`).
- */
+
 export function analisarEndereco(texto: string, portaPadrao: number): Endereco {
     const separador = texto.lastIndexOf(':');
 
@@ -31,19 +25,10 @@ export function analisarEndereco(texto: string, portaPadrao: number): Endereco {
     return { host: host === '' ? HOST_PADRAO : host, porta };
 }
 
-/** Serializa uma mensagem em NDJSON: um JSON por linha. */
 export function codificarLinha(mensagem: unknown): string {
     return `${JSON.stringify(mensagem)}\n`;
 }
 
-/**
- * Cria um decodificador incremental de NDJSON.
- *
- * O TCP não preserva fronteiras de mensagem: um `data` pode trazer metade de
- * um JSON ou dois JSON colados. Sem este buffer, o `JSON.parse` quebraria de
- * vez em quando — falha intermitente, que é o pior tipo de bug em sistema
- * distribuído. Aqui o resto é guardado e só linhas completas são entregues.
- */
 export function criarLeitorDeLinhas(
     aoReceberLinha: (linha: string) => void,
 ): (pedaco: Buffer) => void {
