@@ -43,17 +43,23 @@ node dist/simulador.js --sensor luz --edge 127.0.0.1:4001
 
 ```mermaid
 flowchart LR
-    S1["simulador<br/>sensor A"] --> G1["gateway A"]
-    S2["simulador<br/>sensor B"] --> G2["gateway B"]
-    G1 -->|"leitura"| M["serviço de média"]
-    M -->|"média da janela"| G1
-    G2 -->|"leitura"| M
-    M -->|"média da janela"| G2
+    S1["luz"] --> G1["gateway 1"]
+    S2["umidade"] --> G1
+    S3["presenca"] --> G1
+    S4["ultrassonico"] --> G1
+    S5["pressao"] --> G2["gateway 2"]
+    S6["temperatura"] --> G2
+    G1 -->|"leituras"| M["serviço de média"]
+    M -->|"médias da janela"| G1
+    G2 -->|"leituras"| M
+    M -->|"médias da janela"| G2
 ```
 
-**Um gateway por sensor.** Cada par sensor + gateway é independente: acrescentar um sensor é subir mais um par de processos, sem tocar no que já está rodando.
+**Um gateway para até 4 sensores.** O gateway concentra os sensores da sua área: uma única conexão com o serviço atende todos os que estão atrás dele. Com 6 sensores, dois gateways bastam.
 
-O gateway não agrega nada. Ele confere o envelope e repassa a leitura intacta. No caminho de volta, recebe do serviço a média já calculada e a **mantém em memória para exibir**.
+Quem decide a divisão é o sensor, e só isso: ele aponta para o gateway que quiser, via `--edge`. Mover um sensor de um gateway para outro não muda uma linha de código, e um sétimo sensor pode entrar em qualquer gateway que ainda tenha vaga.
+
+O gateway não agrega nada. Ele confere o envelope e repassa a leitura intacta. No caminho de volta, recebe do serviço a média de **cada** sensor que atende e as mantém em memória para exibir.
 
 O serviço de média acumula por sensor dentro de uma janela de tempo e responde **na mesma conexão** em que a leitura chegou. Como é o gateway que abre a conexão, o serviço não precisa conhecer o endereço de ninguém para responder — a média volta exatamente para quem mandou o dado.
 
@@ -64,26 +70,26 @@ Em terminais separados:
 ```bash
 npm run servico   # 1. serviço de média: porta 5000, janela de 5 s
 
-# 2. um gateway por sensor (cada um na sua porta)
-npm run edge -- --id gw-luz          --porta 4001
-npm run edge -- --id gw-umidade      --porta 4002
-npm run edge -- --id gw-presenca     --porta 4003
-npm run edge -- --id gw-pressao      --porta 4004
-npm run edge -- --id gw-ultrassonico --porta 4005
-npm run edge -- --id gw-temperatura  --porta 4006
+# 2. dois gateways
+npm run edge -- --id gw-1 --porta 4001   # luz, umidade, presenca, ultrassonico
+npm run edge -- --id gw-2 --porta 4002   # pressao, temperatura
 
-# 3. o sensor de cada gateway
-npm run simulador -- --sensor luz         --edge 127.0.0.1:4001
-npm run simulador -- --sensor umidade     --edge 127.0.0.1:4002
-npm run simulador -- --sensor presenca    --edge 127.0.0.1:4003
-npm run simulador -- --sensor pressao     --edge 127.0.0.1:4004
-npm run simulador -- --sensor ultrassonico --edge 127.0.0.1:4005
-npm run simulador -- --sensor temperatura --edge 127.0.0.1:4006
+# 3. os 6 sensores, cada um apontando para o gateway da sua área
+npm run simulador -- --sensor luz          --edge 127.0.0.1:4001
+npm run simulador -- --sensor umidade      --edge 127.0.0.1:4001
+npm run simulador -- --sensor presenca     --edge 127.0.0.1:4001
+npm run simulador -- --sensor ultrassonico --edge 127.0.0.1:4001
+npm run simulador -- --sensor pressao      --edge 127.0.0.1:4002
+npm run simulador -- --sensor temperatura  --edge 127.0.0.1:4002
 ```
 
-Cada processo se identifica pelo `--id`, amostra no intervalo do catálogo e reconecta sozinho se o nó de cima cair. Os gateways só precisam de `--porta` distinta — nada mais muda entre eles.
+A divisão 4 + 2 é só uma escolha. Nada no código depende dela: qualquer sensor pode apontar para qualquer gateway.
 
-**Derrube um processo e veja o resultado:** o par que morreu para de publicar, os outros cinco continuam e o serviço segue calculando as médias deles. Não existe estado compartilhado entre os pares — é falha parcial, não falha total.
+Cada processo se identifica pelo `--id`, amostra no intervalo do catálogo e reconecta sozinho se o nó de cima cair.
+
+**Derrube um processo e veja o resultado:** derrubar um sensor para só a média dele, e o gateway continua atendendo os outros. Derrubar um gateway para as médias dos sensores daquele gateway — os outros seguem, e o serviço continua calculando.
+
+Esse é o trade-off da concentração: menos gateways significa menos processos e menos conexões para administrar, mas cada falha atinge mais sensores de uma vez.
 
 | Variável | Onde | Padrão | Para que serve |
 | --- | --- | --- | --- |
