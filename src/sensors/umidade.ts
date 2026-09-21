@@ -3,13 +3,6 @@ import { PERFIS_SENSORES } from './catalog.ts';
 import { ruidoUniforme } from './random.ts';
 import type { Aleatorio } from './random.ts';
 
-/**
- * Sensor de umidade relativa do ar (%).
- *
- * Caminhada aleatória com reversão à média: o valor varia devagar, mas sempre
- * puxado de volta para o centro da faixa, o que evita que ele "fuja" e fique
- * saturado no limite.
- */
 export class SensorDeUmidade extends SensorBase {
     readonly tipo = 'umidade' as const;
 

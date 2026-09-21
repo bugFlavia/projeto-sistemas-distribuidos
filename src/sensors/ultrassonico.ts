@@ -3,13 +3,6 @@ import { PERFIS_SENSORES } from './catalog.ts';
 import { ruidoUniforme } from './random.ts';
 import type { Aleatorio } from './random.ts';
 
-/**
- * Sensor ultrassônico (cm).
- *
- * Cada instância fica apontada para uma distância de repouso fixa (parede,
- * batente), decidida na criação. O sinal é estável até que algo atravesse o
- * feixe e a distância medida caia por alguns passos.
- */
 export class SensorUltrassonico extends SensorBase {
     readonly tipo = 'ultrassonico' as const;
 

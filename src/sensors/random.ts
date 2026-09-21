@@ -1,13 +1,5 @@
-/** Fonte de números pseudoaleatórios no intervalo [0, 1). */
 export type Aleatorio = () => number;
 
-/**
- * PRNG determinístico (mulberry32).
- *
- * A mesma seed produz exatamente a mesma sequência de leituras. Isso torna a
- * simulação reproduzível: dois nós que recebem a mesma seed geram o mesmo
- * fluxo, o que ajuda a testar e a demonstrar o sistema sem depender de sorte.
- */
 export function criarAleatorio(seed: number): Aleatorio {
     let estado = seed >>> 0;
 
@@ -20,7 +12,6 @@ export function criarAleatorio(seed: number): Aleatorio {
     };
 }
 
-/** Ruído uniforme em `[-amplitude, +amplitude]`. */
 export function ruidoUniforme(aleatorio: Aleatorio, amplitude: number): number {
     return (aleatorio() * 2 - 1) * amplitude;
 }

@@ -4,13 +4,6 @@ import type { Aleatorio } from './random.ts';
 
 const TEMPERATURA_BASE = 24;
 
-/**
- * Sensor de temperatura ambiente (°C).
- *
- * Combina duas componentes: uma caminhada aleatória com reversão à média
- * (variação de curto prazo) e um ciclo térmico lento (aquecimento e
- * resfriamento ao longo do dia).
- */
 export class SensorDeTemperatura extends SensorBase {
     readonly tipo = 'temperatura' as const;
 

@@ -12,16 +12,6 @@ function arredondar(valor: number, casas: number): number {
     return Math.round(valor * fator) / fator;
 }
 
-/**
- * Comportamento comum a todos os sensores simulados.
- *
- * A base cuida do que é igual para todos: contador de sequência, contador de
- * passos, arredondamento, limite de faixa e montagem do envelope. A subclasse
- * implementa apenas `amostrar`, que é a dinâmica própria daquele sensor.
- *
- * Isso é o que mantém a expansão barata: um sensor novo escreve só a sua
- * dinâmica e herda todo o resto de graça.
- */
 export abstract class SensorBase implements Sensor {
     abstract readonly tipo: TipoSensor;
 
@@ -31,10 +21,6 @@ export abstract class SensorBase implements Sensor {
     #sequencia = 0;
     #passo = 0;
 
-    // Campos atribuídos no corpo em vez de parameter properties
-    // (`constructor(readonly id: string)`): o Node apenas *remove* os tipos, e
-    // parameter properties exigiriam transformação de sintaxe. Sem isso, o
-    // mesmo font roda em `node src/server.ts` e no `dist/` compilado.
     constructor(id: string, aleatorio: Aleatorio) {
         this.id = id;
         this.aleatorio = aleatorio;
@@ -64,7 +50,5 @@ export abstract class SensorBase implements Sensor {
             versaoSchema: VERSAO_SCHEMA,
         };
     }
-
-    /** Valor bruto do sensor no passo informado. Cada subclasse define a sua dinâmica. */
     protected abstract amostrar(passo: number): number;
 }

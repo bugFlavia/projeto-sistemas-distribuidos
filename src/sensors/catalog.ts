@@ -1,28 +1,14 @@
 import type { TipoSensor } from './sensor.ts';
 
-/**
- * Metadados de um tipo de sensor.
- *
- * É a fonte única de verdade sobre unidade, faixa e intervalo: as classes de
- * sensor e os consumidores leem daqui em vez de repetir constantes.
- */
 export interface PerfilSensor {
     readonly unidade: string;
     readonly minimo: number;
     readonly maximo: number;
-    /** Intervalo nominal entre amostras, em milissegundos. */
     readonly intervaloMs: number;
     readonly casasDecimais: number;
     readonly descricao: string;
 }
 
-/**
- * Catálogo de sensores.
- *
- * Adicionar um sensor novo ao sistema começa aqui: uma entrada nesta tabela e
- * uma classe que implemente `Sensor`. Nenhum consumidor de leitura precisa
- * ser alterado, e o serviço de média cria o bucket do sensor novo sozinho.
- */
 export const PERFIS_SENSORES = {
     luz: {
         unidade: 'lux',
