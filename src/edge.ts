@@ -3,21 +3,22 @@ import { parseArgs } from 'node:util';
 
 import { registrar, registrarErro } from './comum/log.ts';
 import { analisarEndereco, codificarLinha, criarLeitorDeLinhas } from './comum/protocolo.ts';
-import { VERSAO_SCHEMA, ehLeituraSensor } from './sensors/index.ts';
+import { VERSAO_SCHEMA, ehLeituraSensor, ehResultadoMedia } from './sensors/index.ts';
 import type { Endereco } from './comum/protocolo.ts';
+import type { ResultadoMedia } from './sensors/index.ts';
 
 /**
- * Nó de borda (edge).
+ * Gateway (nó de borda).
  *
- * Nesta etapa ele age como middleware: aceita conexões dos simuladores,
- * confere se o envelope está dentro do contrato e repassa a leitura intacta
- * para o serviço de média. Ele não agrega nada ainda — mas já concentra os
- * sensores num único ponto, que é o que permite trocar o que acontece aqui
- * dentro sem tocar nos sensores.
+ * Não agrega nada: aceita a conexão do sensor, confere se o envelope está
+ * dentro do contrato e repassa a leitura intacta para o serviço de média.
  *
- * O repasse é feito por uma conexão única com o serviço, reaproveitada por
- * todas as conexões de entrada: o número de sensores não vira número de
- * conexões abertas lá em cima.
+ * A conexão com o serviço é única e usada nos dois sentidos: por ela sobem as
+ * leituras e descem as médias calculadas. Como é o gateway que abre a conexão,
+ * o serviço não precisa conhecer o endereço de ninguém para responder — e a
+ * média volta exatamente para quem mandou o dado.
+ *
+ * As médias recebidas ficam em memória neste nó, para exibição.
  */
 /**
  * Rótulo deste nó nos logs.
@@ -95,6 +96,32 @@ function iniciar(): void {
     let invalidas = 0;
     const sensoresVistos = new Set<string>();
     const conexoes = new Set<net.Socket>();
+    /** Última média conhecida de cada sensor. É o que este nó exibe. */
+    const mediasRecebidas = new Map<string, ResultadoMedia>();
+
+    function receberDoServico(linha: string): void {
+        let conteudo: unknown;
+        try {
+            conteudo = JSON.parse(linha);
+        } catch {
+            registrarErro(ESC, 'resposta do serviço descartada: não é JSON válido');
+            return;
+        }
+
+        if (!ehResultadoMedia(conteudo)) {
+            registrarErro(ESC, 'resposta do serviço descartada: fora do contrato');
+            return;
+        }
+
+        // Guardar em memória é o que permite exibir a média sem consultar o
+        // serviço de novo: o valor mais recente de cada sensor fica aqui.
+        mediasRecebidas.set(conteudo.idSensor, conteudo);
+
+        registrar(
+            ESC,
+            `média recebida: ${conteudo.idSensor} = ${conteudo.media.toFixed(2)} ${conteudo.unidade} em ${conteudo.quantidade} amostra(s) | janela ${conteudo.janelaInicio.slice(11, 19)}`,
+        );
+    }
 
     function conectarAoServico(): void {
         if (encerrando) {
@@ -118,6 +145,9 @@ function iniciar(): void {
         novaConexao.on('error', (erro: Error) => {
             registrarErro(ESC, `falha na conexão com o serviço: ${erro.message}`);
         });
+
+        // O mesmo socket que envia leituras recebe as médias de volta.
+        novaConexao.on('data', criarLeitorDeLinhas(receberDoServico));
 
         novaConexao.on('close', () => {
             conectadoAoServico = false;
@@ -195,9 +225,19 @@ function iniciar(): void {
     });
 
     const status = setInterval(() => {
+        const emMemoria =
+            mediasRecebidas.size === 0
+                ? 'nenhuma média ainda'
+                : [...mediasRecebidas.values()]
+                      .map(
+                          (media) =>
+                              `${media.idSensor}=${media.media.toFixed(2)} ${media.unidade} (${media.quantidade} amostra(s))`,
+                      )
+                      .join(', ');
+
         registrar(
             ESC,
-            `${sensoresVistos.size} sensor(es) visto(s), ${encaminhadas} encaminhada(s), ${perdidas} perdida(s), ${invalidas} inválida(s)`,
+            `${sensoresVistos.size} sensor(es) visto(s), ${encaminhadas} encaminhada(s), ${perdidas} perdida(s), ${invalidas} inválida(s) | em memória: ${emMemoria}`,
         );
     }, INTERVALO_DO_STATUS_MS);
 
@@ -214,7 +254,7 @@ function iniciar(): void {
 
         registrar(
             ESC,
-            `recebido ${sinal}, encerrando (${encaminhadas} encaminhada(s), ${perdidas} perdida(s), ${invalidas} inválida(s))`,
+            `recebido ${sinal}, encerrando (${encaminhadas} encaminhada(s), ${perdidas} perdida(s), ${invalidas} inválida(s), ${mediasRecebidas.size} média(s) em memória)`,
         );
 
         for (const conexao of conexoes) {
