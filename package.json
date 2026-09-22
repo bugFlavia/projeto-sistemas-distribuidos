@@ -10,6 +10,8 @@
     "simulador": "node --experimental-strip-types src/simulador.ts",
     "edge": "node --experimental-strip-types src/edge.ts",
     "servico": "node --experimental-strip-types src/servico-media.ts",
+    "servidor": "node --experimental-strip-types src/server.ts",
+    "consultar": "node --experimental-strip-types src/consultar.ts",
     "typecheck": "tsc --noEmit",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

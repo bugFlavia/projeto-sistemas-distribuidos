@@ -192,3 +192,37 @@ export interface RespostaDeMedias {
     readonly gatewaysDesconectados: readonly string[];
     readonly sensores: readonly HistoricoDeSensor[];
 }
+
+function ehHistoricoDeSensor(valor: unknown): valor is HistoricoDeSensor {
+    if (typeof valor !== 'object' || valor === null) {
+        return false;
+    }
+
+    const campos = valor as Record<string, unknown>;
+
+    return (
+        typeof campos['idSensor'] === 'string' &&
+        typeof campos['unidade'] === 'string' &&
+        typeof campos['origem'] === 'string' &&
+        typeof campos['disponivel'] === 'boolean' &&
+        typeof campos['atualizadoEm'] === 'string' &&
+        Array.isArray(campos['medidas']) &&
+        campos['medidas'].every((medida: unknown) => ehResultadoMedia(medida))
+    );
+}
+
+export function ehRespostaDeMedias(valor: unknown): valor is RespostaDeMedias {
+    if (typeof valor !== 'object' || valor === null) {
+        return false;
+    }
+
+    const campos = valor as Record<string, unknown>;
+
+    return (
+        campos['tipoMensagem'] === 'resposta' &&
+        typeof campos['geradoEm'] === 'string' &&
+        Array.isArray(campos['gatewaysDesconectados']) &&
+        Array.isArray(campos['sensores']) &&
+        campos['sensores'].every((sensor: unknown) => ehHistoricoDeSensor(sensor))
+    );
+}
