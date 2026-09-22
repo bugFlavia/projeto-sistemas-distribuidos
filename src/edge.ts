@@ -14,6 +14,11 @@ const INTERVALO_DO_STATUS_MS = 10_000;
 const PORTA_PADRAO_DE_ESCUTA = 4000;
 const SERVICO_PADRAO = '127.0.0.1:5000';
 const PORTA_PADRAO_DO_SERVICO = 5000;
+const SERVIDOR_PADRAO = '127.0.0.1:6000';
+const PORTA_PADRAO_DO_SERVIDOR = 6000;
+
+/** Quantas janelas cada sensor guarda em memória. */
+const TAMANHO_DO_HISTORICO = Number(process.env['HISTORICO_TAMANHO'] ?? 20);
 
 function uso(): string {
     return [
@@ -23,8 +28,10 @@ function uso(): string {
         `  --porta <número>   porta em que escuta (padrão: ${PORTA_PADRAO_DE_ESCUTA})`,
         '  -h, --ajuda        mostra esta mensagem',
         '',
-        'Variáveis de ambiente: EDGE_PORT substitui --porta e SERVICO_ADDR define',
-        `o serviço de destino (padrão: ${SERVICO_PADRAO}).`,
+        'Variáveis de ambiente: EDGE_PORT substitui --porta, SERVICO_ADDR define',
+        `o serviço de destino (padrão: ${SERVICO_PADRAO}) e SERVIDOR_ADDR define o`,
+        `servidor de destino (padrão: ${SERVIDOR_PADRAO}). HISTORICO_TAMANHO controla`,
+        `quantas janelas cada sensor guarda em memória (padrão: ${TAMANHO_DO_HISTORICO}).`,
     ].join('\n');
 }
 
@@ -66,18 +73,64 @@ function iniciar(): void {
         PORTA_PADRAO_DO_SERVICO,
     );
 
+    const enderecoDoServidor: Endereco = analisarEndereco(
+        process.env['SERVIDOR_ADDR'] ?? SERVIDOR_PADRAO,
+        PORTA_PADRAO_DO_SERVIDOR,
+    );
+
     let servico: net.Socket | undefined;
     let conectadoAoServico = false;
+    let conexaoComOServidor: net.Socket | undefined;
+    let conectadoAoServidor = false;
     let encerrando = false;
     let reconexao: NodeJS.Timeout | undefined;
+    let reconexaoComOServidor: NodeJS.Timeout | undefined;
 
     let encaminhadas = 0;
     let perdidas = 0;
     let invalidas = 0;
+    let atualizacoesEnviadas = 0;
+    let atualizacoesPerdidas = 0;
     const sensoresVistos = new Set<string>();
     const conexoes = new Set<net.Socket>();
-    /** Última média conhecida de cada sensor. É o que este nó exibe. */
-    const mediasRecebidas = new Map<string, ResultadoMedia>();
+
+    /**
+     * Histórico das últimas médias de cada sensor, em anel: entrou uma, sai a
+     * mais antiga. Guardar tudo num nó que roda por horas é o caminho para
+     * estourar a memória.
+     */
+    const historicos = new Map<string, ResultadoMedia[]>();
+
+    function guardarNoHistorico(media: ResultadoMedia): void {
+        let historico = historicos.get(media.idSensor);
+
+        if (historico === undefined) {
+            historico = [];
+            historicos.set(media.idSensor, historico);
+        }
+
+        historico.push(media);
+
+        if (historico.length > TAMANHO_DO_HISTORICO) {
+            historico.shift();
+        }
+    }
+
+    function enviarAoServidor(medias: readonly ResultadoMedia[]): void {
+        if (medias.length === 0) {
+            return;
+        }
+
+        if (!conectadoAoServidor || conexaoComOServidor === undefined) {
+            atualizacoesPerdidas += medias.length;
+            return;
+        }
+
+        conexaoComOServidor.write(
+            codificarLinha({ tipoMensagem: 'atualizacao', idGateway: ESC, medias }),
+        );
+        atualizacoesEnviadas += medias.length;
+    }
 
     function receberDoServico(linha: string): void {
         let conteudo: unknown;
@@ -93,14 +146,15 @@ function iniciar(): void {
             return;
         }
 
-        // Guardar em memória é o que permite exibir a média sem consultar o
-        // serviço de novo: o valor mais recente de cada sensor fica aqui.
-        mediasRecebidas.set(conteudo.idSensor, conteudo);
+        guardarNoHistorico(conteudo);
 
         registrar(
             ESC,
             `média recebida: ${conteudo.idSensor} = ${conteudo.media.toFixed(2)} ${conteudo.unidade} em ${conteudo.quantidade} amostra(s) | janela ${conteudo.janelaInicio.slice(11, 19)}`,
         );
+
+        // Repassa ao servidor assim que chega: é ele quem atende o cliente.
+        enviarAoServidor([conteudo]);
     }
 
     function conectarAoServico(): void {
@@ -139,6 +193,47 @@ function iniciar(): void {
 
             registrar(ESC, `desconectado do serviço; nova tentativa em ${INTERVALO_DE_RECONEXAO_MS} ms`);
             reconexao = setTimeout(conectarAoServico, INTERVALO_DE_RECONEXAO_MS);
+        });
+    }
+
+    function conectarAoServidor(): void {
+        if (encerrando) {
+            return;
+        }
+
+        const novaConexao = net.createConnection({
+            host: enderecoDoServidor.host,
+            port: enderecoDoServidor.porta,
+        });
+        conexaoComOServidor = novaConexao;
+
+        novaConexao.on('connect', () => {
+            conectadoAoServidor = true;
+            registrar(
+                ESC,
+                `conectado ao servidor em ${enderecoDoServidor.host}:${enderecoDoServidor.porta}`,
+            );
+
+            // O servidor pode ter reiniciado e voltado vazio. Como a memória
+            // deste nó é a fonte de verdade dos sensores dele, o histórico
+            // inteiro vai junto na reconexão e o servidor se reconstrói sozinho.
+            enviarAoServidor([...historicos.values()].flat());
+        });
+
+        novaConexao.on('error', (erro: Error) => {
+            registrarErro(ESC, `falha na conexão com o servidor: ${erro.message}`);
+        });
+
+        novaConexao.on('close', () => {
+            conectadoAoServidor = false;
+            conexaoComOServidor = undefined;
+
+            if (encerrando) {
+                return;
+            }
+
+            registrar(ESC, `desconectado do servidor; nova tentativa em ${INTERVALO_DE_RECONEXAO_MS} ms`);
+            reconexaoComOServidor = setTimeout(conectarAoServidor, INTERVALO_DE_RECONEXAO_MS);
         });
     }
 
@@ -206,13 +301,17 @@ function iniciar(): void {
 
     const status = setInterval(() => {
         const emMemoria =
-            mediasRecebidas.size === 0
+            historicos.size === 0
                 ? 'nenhuma média ainda'
-                : [...mediasRecebidas.values()]
-                      .map(
-                          (media) =>
-                              `${media.idSensor}=${media.media.toFixed(2)} ${media.unidade} (${media.quantidade} amostra(s))`,
-                      )
+                : [...historicos.entries()]
+                      .map(([idSensor, historico]) => {
+                          const ultima = historico.at(-1);
+                          const valor =
+                              ultima === undefined
+                                  ? 'sem leitura'
+                                  : `${ultima.media.toFixed(2)} ${ultima.unidade}`;
+                          return `${idSensor}=${valor} (${historico.length} janela(s))`;
+                      })
                       .join(', ');
 
         registrar(
@@ -231,10 +330,13 @@ function iniciar(): void {
         if (reconexao !== undefined) {
             clearTimeout(reconexao);
         }
+        if (reconexaoComOServidor !== undefined) {
+            clearTimeout(reconexaoComOServidor);
+        }
 
         registrar(
             ESC,
-            `recebido ${sinal}, encerrando (${encaminhadas} encaminhada(s), ${perdidas} perdida(s), ${invalidas} inválida(s), ${mediasRecebidas.size} média(s) em memória)`,
+            `recebido ${sinal}, encerrando (${encaminhadas} encaminhada(s), ${perdidas} perdida(s), ${invalidas} inválida(s), ${historicos.size} sensor(es) em memória, ${atualizacoesEnviadas} atualização(ões) enviada(s), ${atualizacoesPerdidas} perdida(s))`,
         );
 
         for (const conexao of conexoes) {
@@ -249,6 +351,12 @@ function iniciar(): void {
         } else {
             servico?.destroy();
         }
+
+        if (conectadoAoServidor) {
+            conexaoComOServidor?.end();
+        } else {
+            conexaoComOServidor?.destroy();
+        }
     }
 
     for (const sinal of ['SIGINT', 'SIGTERM'] as const) {
@@ -256,10 +364,14 @@ function iniciar(): void {
     }
 
     servidor.listen(porta, () => {
-        registrar(ESC, `escutando na porta ${porta} e repassando para ${enderecoDoServico.host}:${enderecoDoServico.porta}`);
+        registrar(
+            ESC,
+            `escutando na porta ${porta}; leituras seguem para o serviço em ${enderecoDoServico.host}:${enderecoDoServico.porta} e médias para o servidor em ${enderecoDoServidor.host}:${enderecoDoServidor.porta}`,
+        );
     });
 
     conectarAoServico();
+    conectarAoServidor();
 }
 
 try {
