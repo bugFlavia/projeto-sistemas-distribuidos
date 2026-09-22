@@ -5,18 +5,6 @@ import { codificarLinha, criarLeitorDeLinhas } from './comum/protocolo.ts';
 import { ehAtualizacaoDeMedias, ehConsultaDeMedias } from './comum/contrato.ts';
 import type { HistoricoDeSensor, ResultadoMedia } from './comum/contrato.ts';
 
-/**
- * Servidor: o único ponto que o cliente conhece.
- *
- * Ele não calcula nada. Recebe dos gateways as médias que eles guardaram em
- * memória, mantém a visão consolidada e responde às consultas do cliente. É o
- * que faz o sistema ser distribuído por dentro e um só por fora: o cliente
- * nunca descobre quantos gateways existem, nem em que porta cada um está.
- *
- * Gateways e clientes chegam pela mesma porta, distinguidos pelo campo
- * `tipoMensagem`. A mensagem é auto-descritiva, então uma porta basta.
- */
-
 const ESC = 'servidor';
 const PORTA_PADRAO = 6000;
 const INTERVALO_DO_STATUS_MS = 30_000;
