@@ -19,68 +19,83 @@ npm install
 
 | Comando | Descrição |
 | --- | --- |
-| `npm run servico` | Serviço de média: acumula por sensor e por janela |
-| `npm run edge` | Gateway de borda; um por sensor, use `--porta` e `--id` |
+| `npm run servico` | Serviço de média: calcula a média da janela e devolve ao gateway |
+| `npm run servidor` | Servidor: recebe as médias dos gateways e atende o cliente |
+| `npm run edge` | Gateway de borda; use `--id` e `--porta` |
 | `npm run simulador` | Um sensor simulado; use `--sensor` |
+| `npm run consultar` | Cliente: exibe o histórico das médias |
 | `npm run build` | Compila o TypeScript para `dist/` |
 | `npm run typecheck` | Apenas verifica os tipos, sem gerar arquivos |
-| `npm run dev` | Servidor de exemplo (`src/server.ts`), com reload automático |
-| `npm start` | Servidor de exemplo compilado (`dist/server.js`) |
+| `npm run dev` | Servidor, com reload automático |
+| `npm start` | Servidor compilado (`dist/server.js`) |
 
 ### Executando os componentes
 
-`npm run servico`, `npm run edge` e `npm run simulador` executam os fontes `.ts` direto pelo Node (type stripping), sem etapa de build. Depois de `npm run build`, os equivalentes compilados são:
+Os scripts rodam os fontes `.ts` direto pelo Node (type stripping), sem etapa de build. Depois de `npm run build`, os equivalentes compilados são:
 
 ```bash
 node dist/servico-media.js
-node dist/edge.js --id gw-luz --porta 4001
+node dist/server.js
+node dist/edge.js --id gw-1 --porta 4001
 node dist/simulador.js --sensor luz --edge 127.0.0.1:4001
+node dist/consultar.js
 ```
-
-`src/server.ts`, `npm run dev` e `npm start` são o servidor TCP de exemplo do começo do projeto: continuam funcionando (`PORT` muda a porta), mas não participam da cadeia.
 
 ## Fluxo de dados
 
 ```mermaid
 flowchart LR
-    S1["luz"] --> G1["gateway 1"]
-    S2["umidade"] --> G1
-    S3["presenca"] --> G1
-    S4["ultrassonico"] --> G1
-    S5["pressao"] --> G2["gateway 2"]
-    S6["temperatura"] --> G2
+    S["6 sensores<br/>(1 processo cada)"] --> G1["gateway 1"]
+    S --> G2["gateway 2"]
     G1 -->|"leituras"| M["serviço de média"]
-    M -->|"médias da janela"| G1
+    M -->|"média da janela"| G1
     G2 -->|"leituras"| M
-    M -->|"médias da janela"| G2
+    M -->|"média da janela"| G2
+    G1 -->|"médias guardadas"| SV["servidor"]
+    G2 -->|"médias guardadas"| SV
+    CL["cliente"] -->|"consulta"| SV
 ```
 
-**Um gateway para até 4 sensores.** O gateway concentra os sensores da sua área: uma única conexão com o serviço atende todos os que estão atrás dele. Com 6 sensores, dois gateways bastam.
+Quatro papéis, cada um com uma responsabilidade:
 
-Quem decide a divisão é o sensor, e só isso: ele aponta para o gateway que quiser, via `--edge`. Mover um sensor de um gateway para outro não muda uma linha de código, e um sétimo sensor pode entrar em qualquer gateway que ainda tenha vaga.
+| Componente | Faz | Não faz |
+| --- | --- | --- |
+| sensor | emite leituras no intervalo do catálogo | não conhece o resto |
+| gateway | pede a média ao serviço, guarda em memória, envia ao servidor | não calcula |
+| serviço | calcula a média da janela e devolve ao gateway | não fala com cliente |
+| servidor | consolida o que recebe dos gateways e atende o cliente | não calcula |
 
-O gateway não agrega nada. Ele confere o envelope e repassa a leitura intacta. No caminho de volta, recebe do serviço a média de **cada** sensor que atende e as mantém em memória para exibir.
+O gateway não agrega nada: confere o envelope e repassa a leitura intacta. O que ele guarda é a **média** que volta do serviço — as últimas `HISTORICO_TAMANHO` janelas de cada sensor.
 
-O serviço de média acumula por sensor dentro de uma janela de tempo e responde **na mesma conexão** em que a leitura chegou. Como é o gateway que abre a conexão, o serviço não precisa conhecer o endereço de ninguém para responder — a média volta exatamente para quem mandou o dado.
+Um gateway atende até 4 sensores, apontados por `--edge`. Mover um sensor de um gateway para outro não muda uma linha de código.
+
+Ao (re)conectar no servidor, o gateway envia o histórico inteiro. Como a memória dele é a fonte de verdade dos seus sensores, o servidor se reconstrói sozinho depois de um reinício.
 
 ### Rodando
 
 Em terminais separados:
 
 ```bash
-npm run servico   # 1. serviço de média: porta 5000, janela de 5 s
+npm run servico
+npm run servidor
 
-# 2. dois gateways
-npm run edge -- --id gw-1 --porta 4001   # luz, umidade, presenca, ultrassonico
-npm run edge -- --id gw-2 --porta 4002   # pressao, temperatura
+npm run edge -- --id gw-1 --porta 4001
+npm run edge -- --id gw-2 --porta 4002   
 
-# 3. os 6 sensores, cada um apontando para o gateway da sua área
 npm run simulador -- --sensor luz          --edge 127.0.0.1:4001
 npm run simulador -- --sensor umidade      --edge 127.0.0.1:4001
 npm run simulador -- --sensor presenca     --edge 127.0.0.1:4001
 npm run simulador -- --sensor ultrassonico --edge 127.0.0.1:4001
 npm run simulador -- --sensor pressao      --edge 127.0.0.1:4002
 npm run simulador -- --sensor temperatura  --edge 127.0.0.1:4002
+```
+
+A consulta fala **só com o servidor**, em `127.0.0.1:6000`:
+
+```bash
+npm run consultar
+npm run consultar -- --sensor luz-01
+npm run consultar -- --json
 ```
 
 A divisão 4 + 2 é só uma escolha. Nada no código depende dela: qualquer sensor pode apontar para qualquer gateway.
@@ -95,8 +110,11 @@ Esse é o trade-off da concentração: menos gateways significa menos processos 
 | --- | --- | --- | --- |
 | `SERVICO_PORT` | serviço | `5000` | porta em que o serviço escuta |
 | `JANELA_MS` | serviço | `5000` | duração da janela de agregação |
+| `SERVIDOR_PORT` | servidor | `6000` | porta em que o servidor escuta |
+| `HISTORICO_TAMANHO` | gateway, servidor | `20` | quantas janelas cada sensor guarda |
 | `EDGE_PORT` | gateway | `4000` | porta de escuta (`--porta` tem precedência) |
 | `SERVICO_ADDR` | gateway | `127.0.0.1:5000` | onde está o serviço de média |
+| `SERVIDOR_ADDR` | gateway, cliente | `127.0.0.1:6000` | onde está o servidor |
 | `EDGE_ADDR` | simulador | `127.0.0.1:4000` | gateway de destino |
 
 ### Sobre o protocolo
@@ -142,7 +160,7 @@ for (const sensor of sensores) {
 
 A `seed` é fixa por padrão (42) para que a simulação seja reproduzível. Passe `seed: Date.now()` para variar a cada execução.
 
-Adicionar um **tipo** novo de sensor é: uma entrada em `PERFIS_SENSORES`, uma classe que estenda `SensorBase` e um `case` em `criarSensor()`. Nem o edge nem o serviço de média precisam saber que ele existe.
+Adicionar um **tipo** novo de sensor é: uma entrada em `PERFIS_SENSORES`, uma classe que estenda `SensorBase` e um `case` em `criarSensor()`. Nenhum outro componente precisa saber que ele existe.
 
 Adicionar apenas outra **instância** de um tipo que já existe (um segundo sensor de temperatura, por exemplo) não precisa de código nenhum: é só subir outro processo com `--id temperatura-02`.
 
@@ -151,14 +169,16 @@ Adicionar apenas outra **instância** de um tipo que já existe (um segundo sens
 ## Estrutura
 
 - `src/simulador.ts` — um processo por sensor: publica as leituras no gateway
-- `src/edge.ts` — gateway: valida, repassa a leitura e guarda em memória a média que volta
-- `src/servico-media.ts` — acumula por sensor e por janela de tempo e devolve a média ao gateway
-- `src/server.ts` — servidor TCP de exemplo; não participa da cadeia
+- `src/edge.ts` — gateway: pede a média ao serviço, guarda o histórico e envia ao servidor
+- `src/servico-media.ts` — calcula a média por sensor e por janela e devolve ao gateway
+- `src/server.ts` — servidor: consolida o que vem dos gateways e atende o cliente
+- `src/consultar.ts` — cliente que exibe o histórico das médias
 - `src/comum/`
+  - `contrato.ts` — todas as mensagens do protocolo e os seus validadores
   - `protocolo.ts` — framing NDJSON e leitura de endereço `host:porta`
   - `log.ts` — log com carimbo de horário, para correlacionar os vários processos
-- `src/sensors/` — contrato e implementação dos `LeituraSensor` e `ResultadoMedia`, e os validadores `ehLeituraSensor`/`ehResultadoMedia`
-  - `sensor.ts` — interface `Sensor`, envelope `LeituraSensor` e tipos
+- `src/sensors/` — interface e implementação dos sensores
+  - `sensor.ts` — interface `Sensor`
   - `catalog.ts` — catálogo com unidade, faixa e intervalo de cada tipo
   - `base-sensor.ts` — comportamento comum (sequência, arredondamento, faixa)
   - `random.ts` — PRNG determinístico
