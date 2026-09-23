@@ -2,13 +2,19 @@
   // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
     // File Layout
-    "rootDir": "./",
+    "rootDir": "./src",
     "outDir": "./dist",
 
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
     "module": "nodenext",
     "target": "esnext",
+    // O Node executa TypeScript direto e exige a extensão real do arquivo no
+    // import. Estas duas opções permitem escrever './arquivo.ts' no código e
+    // reescrever para './arquivo.js' na compilação: os mesmos fontes funcionam
+    // tanto em `npm run dev` (Node) quanto em `npm start` (dist/).
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
     // For nodejs:
     "lib": ["esnext"],
     "types": ["node"],
@@ -39,5 +45,5 @@
     "moduleDetection": "force",
     "skipLibCheck": true
   },
-  "include": ["server.ts"]
+  "include": ["src/**/*.ts"]
 }
